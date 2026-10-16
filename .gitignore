@@ -1,0 +1,24 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.env
+node_modules/
+dist/
+src/main/backend/data/synthetic/
+src/main/backend/data/evaluation/
+.DS_Store
+
+# Private hackathon ideation/validation docs — never push these publicly.
+IDEATION_README.md
+01_fraudscope.md
+02_upitrace.md
+03_ghostgraph.md
+04_crosssignal.md
+05_intentlock.md
+06_fundwise.md
+AUDIT_SUMMARY.md
+VALIDATION_TRACKER.md
+PHASE_2_EXPERIMENT_PLAN.md
+PHASE_2_STATUS.md
+UPITRACE_BASELINE_TASK.md

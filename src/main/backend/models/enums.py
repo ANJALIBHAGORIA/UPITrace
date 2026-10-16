@@ -1,0 +1,95 @@
+"""Enumerations shared across UPITrace domain models (spec sections 3.1-3.10)."""
+from enum import Enum
+
+
+class IncidentStatus(str, Enum):
+    OPEN = "OPEN"
+    INVESTIGATING = "INVESTIGATING"
+    AWAITING_EVIDENCE = "AWAITING_EVIDENCE"
+    ACTION_PROPOSED = "ACTION_PROPOSED"
+    ACTION_PENDING = "ACTION_PENDING"
+    RESOLVED = "RESOLVED"
+    CLOSED = "CLOSED"
+
+
+class ReconciliationStatus(str, Enum):
+    CONFIRMED = "CONFIRMED"
+    PENDING = "PENDING"
+    STATUS_MISMATCH = "STATUS_MISMATCH"
+    MERCHANT_CONFIRMATION_MISSING = "MERCHANT_CONFIRMATION_MISSING"
+    INSUFFICIENT_EVIDENCE = "INSUFFICIENT_EVIDENCE"
+    POSSIBLE_DUPLICATE = "POSSIBLE_DUPLICATE"
+    REVERSAL_UNVERIFIED = "REVERSAL_UNVERIFIED"
+    UNRESOLVED = "UNRESOLVED"
+
+
+class SourceMode(str, Enum):
+    SIMULATED = "SIMULATED"
+    LIVE = "LIVE"
+    UNAVAILABLE = "UNAVAILABLE"
+    AWAITING_AUTHORIZATION = "AWAITING_AUTHORIZATION"
+
+
+class OrderStatus(str, Enum):
+    PENDING = "PENDING"
+    CONFIRMED = "CONFIRMED"
+    FAILED = "FAILED"
+    EXPIRED = "EXPIRED"
+    CANCELLED = "CANCELLED"
+    NOT_FOUND = "NOT_FOUND"
+
+
+class VerificationStatus(str, Enum):
+    VERIFIED = "VERIFIED"
+    UNVERIFIED = "UNVERIFIED"
+    CONFLICTED = "CONFLICTED"
+    NOT_APPLICABLE = "NOT_APPLICABLE"
+
+
+class DeliveryStatus(str, Enum):
+    CREATED = "CREATED"
+    SENT = "SENT"
+    DELIVERED = "DELIVERED"
+    FAILED = "FAILED"
+    UNKNOWN = "UNKNOWN"
+
+
+class ProcessingStatus(str, Enum):
+    PROCESSED = "PROCESSED"
+    REJECTED = "REJECTED"
+    NOT_PROCESSED = "NOT_PROCESSED"
+    UNKNOWN = "UNKNOWN"
+
+
+class FindingType(str, Enum):
+    FACT = "FACT"
+    CONFLICT = "CONFLICT"
+    HYPOTHESIS = "HYPOTHESIS"
+    MISSING_EVIDENCE = "MISSING_EVIDENCE"
+    RECOMMENDATION = "RECOMMENDATION"
+
+
+class ActionStatus(str, Enum):
+    PROPOSED = "PROPOSED"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+    EXECUTED = "EXECUTED"
+    FAILED = "FAILED"
+
+
+class ExecutionMode(str, Enum):
+    SIMULATED = "SIMULATED"
+    LIVE = "LIVE"
+
+
+class ExecutionStatus(str, Enum):
+    PENDING = "PENDING"
+    SUCCEEDED = "SUCCEEDED"
+    FAILED = "FAILED"
+    REJECTED = "REJECTED"
+
+
+class OutcomeVerificationResult(str, Enum):
+    VERIFIED = "VERIFIED"
+    NOT_VERIFIED = "NOT_VERIFIED"
+    UNKNOWN = "UNKNOWN"
