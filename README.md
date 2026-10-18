@@ -5,10 +5,11 @@
 
 AI-assisted investigation for UPI payment incidents where the customer-facing status, provider/gateway records, bank evidence, notification logs, and merchant order status may be incomplete or contradictory.
 
-> 🔗 Live demo: _not yet deployed — see [Deployment](#deployment)_
-> 🔗 Public API: _not yet deployed_
-> 🔗 GitHub repo: https://github.com/ANJALIBHAGORIA/UPITrace
-> 🔗 Demo video: _not yet recorded_
+🔗 **Live demo:** [UPITrace — Live Prototype](https://upitrace-973510425520.us-central1.run.app)
+
+🔗 **GitHub repo:** [UPITrace on GitHub](https://github.com/ANJALIBHAGORIA/UPITrace)
+
+🔗 **Demo video:** [Watch the UPITrace Demo](https://drive.google.com/file/d/1OFjA3I4XrW3NQpP0XWx-RhTda-bsEwge/view?usp=drive_link)
 
 ---
 
