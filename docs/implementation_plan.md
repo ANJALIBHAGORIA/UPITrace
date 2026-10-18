@@ -105,6 +105,49 @@ Each phase only starts once the previous phase's acceptance criteria pass.
 - Not yet done: this was a one-shot manual smoke test via curl through the proxy, not a
   real browser click-through — no visual/screenshot verification was performed.
 
+## Vertex AI migration (post-RAG addition)
+- Switched production AI provider from Google AI Studio to Vertex AI. `ai/vertex_provider.py`
+  rewritten on `google-genai` (Vertex mode, ADC auth) — not the deprecated
+  `vertexai.generative_models` module.
+- `investigation/orchestrator.py`'s `_default_provider()` is now Vertex-only. **Verified in the
+  running app**: with `GEMINI_API_KEY` still set in the environment, `POST /investigate`
+  correctly returns `ai_used: false, source_mode: UNAVAILABLE` — it does NOT silently fall back
+  to AI Studio. Also covered by
+  `test_orchestrator_does_not_silently_use_ai_studio_when_vertex_unconfigured`.
+- `retrieval/embeddings.py` gained `VertexEmbeddingProvider`; `VectorIndex` now tags
+  `provider_type` so query-time embeddings always match whichever provider actually built the
+  index (mixing Vertex/AI-Studio vectors would make cosine similarity meaningless).
+- New `scripts/check_vertex_status.py` — safe status check (env vars → ADC → one real trivial
+  model call), prints only pass/fail, never credentials or incident data. **Run on this
+  machine**: all three checks FAIL (no `GOOGLE_CLOUD_PROJECT`/`VERTEX_AI_GEMINI_MODEL` set, no
+  ADC file at `~/.config/gcloud/application_default_credentials.json`, no `gcloud` installed).
+- 92/92 tests pass (`pytest src/main/backend/tests -q`).
+- **Explicitly NOT claimed as working**: no real Vertex AI call has ever succeeded on this
+  machine — there is no ADC and no project/model configured. The code is reviewed and the
+  failure paths are verified; the success path is unexercised. Next step to actually prove it:
+  `gcloud auth application-default login`, set the three env vars, run
+  `check_vertex_status.py`.
+
+## RAG status (post-Phase 4 addition)
+- Synthetic dataset scaled from 72 → 10,008 incidents (`INCIDENTS_PER_CATEGORY = 834`).
+  Fixed a real bug this exposed: `_ts()` offsets were constants, so every incident in a
+  category used to land on the exact same timestamp — now spread via a per-incident anchor
+  (`TIME_SPREAD_MINUTES = 15`), confirmed 10,008/10,008 unique timestamps.
+- `retrieval/embeddings.py` — free-tier Gemini embeddings (`text-embedding-004` via the same
+  `GEMINI_API_KEY`, batched 100-at-a-time, NOT Vertex AI — no GCP project needed).
+- `retrieval/vector_index.py` — local numpy cosine-similarity index (~10k × 768-dim fits in
+  memory fine; no managed vector DB needed at this scale).
+- `scripts/build_rag_index.py` — explicit, separate batch job (not run on server startup,
+  since it costs real API quota/time). Confirmed it fails closed with a clear message when
+  `GEMINI_API_KEY` is unset (verified: exit code 1, no stack trace).
+- `/api/v1/incidents/{id}/similar-cases` now tries semantic search first, falls back to the
+  original lexical method if no index file exists — every result's `method` field says which
+  one actually ran. Confirmed on this machine (no API key yet): falls back correctly,
+  `method: "lexical"` on every result.
+- **Not yet done**: nobody has actually run `build_rag_index.py` successfully — no
+  `GEMINI_API_KEY` is configured on this machine. The pipeline is real, reviewed code; the
+  semantic-search path is unexercised until a key is provided and the script is run.
+
 ## Phase 1 acceptance criteria
 - [ ] Domain models for: Incident, PaymentAttempt, MerchantOrder, SourceEvent, EvidenceRecord,
       NotificationRecord, Runbook, Finding/Citation, ActionProposal/ActionExecution, AuditRecord,

@@ -2,11 +2,25 @@
 __pycache__/
 *.pyc
 .pytest_cache/
+.coverage
+htmlcov/
 .env
+.env.*
+!.env.example
 node_modules/
 dist/
+build/
 src/main/backend/data/synthetic/
 src/main/backend/data/evaluation/
+*.db
+*.sqlite3
+*.log
+*.pem
+*.key
+*serviceAccount*.json
+*service-account*.json
+.vscode/
+.idea/
 .DS_Store
 
 # Private hackathon ideation/validation docs — never push these publicly.

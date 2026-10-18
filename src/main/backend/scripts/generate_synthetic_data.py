@@ -45,7 +45,11 @@ from src.main.backend.models import (
 )
 
 BASE_TIME = datetime(2026, 10, 12, 10, 0, 0, tzinfo=timezone.utc)
-MERCHANTS = ["IRCTC", "BigBasket", "Zomato", "BookMyShow", "Flipkart"]
+MERCHANTS = [
+    "IRCTC", "BigBasket", "Zomato", "BookMyShow", "Flipkart", "Swiggy",
+    "Myntra", "Amazon", "MakeMyTrip", "PharmEasy", "Ola",
+]
+TIME_SPREAD_MINUTES = 15  # gap between consecutive incidents' anchors
 DATA_ROOT = Path(__file__).resolve().parents[1] / "data"
 SYNTHETIC_DIR = DATA_ROOT / "synthetic"
 EVALUATION_DIR = DATA_ROOT / "evaluation"
@@ -76,8 +80,16 @@ class IdFactory:
         return f"{prefix}-{self._counters[prefix]:04d}"
 
 
+# Mutable anchor, set once per incident before its builder runs (see
+# `generate()`). Lets every builder keep writing small relative offsets like
+# _ts(0), _ts(2) for "within this incident's timeline" while still landing
+# each incident at a distinct, spread-out point in history — without having
+# to thread an index through every one of the ~40+ _ts() call sites.
+_anchor_minutes = [0.0]
+
+
 def _ts(minutes: float) -> datetime:
-    return BASE_TIME + timedelta(minutes=minutes)
+    return BASE_TIME + timedelta(minutes=_anchor_minutes[0] + minutes)
 
 
 # ---------------------------------------------------------------------------
@@ -714,7 +726,7 @@ SCENARIO_BUILDERS = [
     _build_insufficient_evidence,
 ]
 
-INCIDENTS_PER_CATEGORY = 3  # 12 categories * 3 = 36 total, >= 30 required
+INCIDENTS_PER_CATEGORY = 834  # 12 categories * 834 = 10008 total (~10k for RAG corpus)
 
 
 def _build_runbooks(ids: IdFactory) -> list[Runbook]:
@@ -740,9 +752,12 @@ def generate(seed: int = 42) -> dict[str, Any]:
     ids = IdFactory()
     bundles: list[Bundle] = []
 
+    global_idx = 0
     for category_idx, builder in enumerate(SCENARIO_BUILDERS):
         for i in range(INCIDENTS_PER_CATEGORY):
+            _anchor_minutes[0] = global_idx * TIME_SPREAD_MINUTES
             bundles.append(builder(ids, rng, i + 1))
+            global_idx += 1
 
     incidents = [b.incident for b in bundles]
     payment_attempts = [b.payment_attempt for b in bundles if b.payment_attempt]

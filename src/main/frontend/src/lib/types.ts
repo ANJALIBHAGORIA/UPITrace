@@ -108,6 +108,7 @@ export interface SimilarCase {
   title: string
   similarity_score: number
   shared_terms: string[]
+  method: "lexical" | "semantic_rag"
 }
 
 export interface SampleIncidentSummary {

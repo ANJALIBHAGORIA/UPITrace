@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react"
 import { Link, useParams } from "react-router-dom"
-import { IncidentSubNav } from "../components/IncidentSubNav"
 import { Badge, Card, EmptyState, ErrorState, LoadingState, SectionTitle } from "../components/ui"
 import { api } from "../lib/api"
 import type { Incident, Runbook, SimilarCase } from "../lib/types"
@@ -29,33 +28,40 @@ export function SimilarCasesAndRunbooks() {
 
   return (
     <div>
-      <IncidentSubNav id={id} />
       <div className="grid gap-6 md:grid-cols-2">
         <Card>
           <SectionTitle>Similar incidents</SectionTitle>
-          <p className="mb-3 text-xs text-slate-400">
-            Lexical (word-overlap) similarity over title + complaint — real computed scores,
-            not a placeholder. Not a semantic/embedding search (see docs/architecture.md).
-          </p>
+          {cases.length > 0 && (
+            <p className="mb-3 text-xs text-slate-400">
+              {cases[0].method === "semantic_rag"
+                ? "Semantic search — Gemini embeddings + cosine similarity over the RAG index."
+                : "Lexical (word-overlap) similarity — no RAG index built yet, see docs/architecture.md."}
+            </p>
+          )}
           {cases.length === 0 ? (
             <EmptyState message="No sufficiently similar incidents found." />
           ) : (
-            <ul className="space-y-2">
+            <ul className="space-y-3">
               {cases.map((c) => (
-                <li key={c.incident_id}>
-                  <Link
-                    to={`/incidents/${c.incident_id}`}
-                    className="block rounded-lg border border-slate-200 p-3 text-sm hover:border-indigo-300 dark:border-slate-800"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium text-slate-900 dark:text-white">{c.title}</span>
-                      <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-400">
-                        {Math.round(c.similarity_score * 100)}% match
-                      </span>
+                <li key={c.incident_id} className="rounded-xl border-l-4 border-indigo-400 bg-white p-4 shadow-sm">
+                  <div className="mb-1 flex items-center justify-between">
+                    <Link to={`/incidents/${c.incident_id}`} className="text-sm font-semibold text-indigo-600 hover:underline">
+                      Case #{c.incident_id}
+                    </Link>
+                    <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
+                      {Math.round(c.similarity_score * 100)}% similar
+                    </span>
+                  </div>
+                  <p className="font-semibold text-slate-900">{c.title}</p>
+                  {c.shared_terms.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {c.shared_terms.slice(0, 4).map((t) => (
+                        <span key={t} className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700">{t}</span>
+                      ))}
                     </div>
-                    {c.shared_terms.length > 0 && (
-                      <p className="mt-1 text-xs text-slate-400">shared: {c.shared_terms.join(", ")}</p>
-                    )}
+                  )}
+                  <Link to={`/incidents/${c.incident_id}`} className="mt-2 inline-block text-xs font-medium text-indigo-600 hover:underline">
+                    View Case →
                   </Link>
                 </li>
               ))}

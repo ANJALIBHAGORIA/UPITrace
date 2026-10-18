@@ -43,3 +43,4 @@ class SimilarCase(BaseModel):
     title: str
     similarity_score: float
     shared_terms: list[str]
+    method: str = "lexical"  # "lexical" | "semantic_rag" — never hidden from the caller

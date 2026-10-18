@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.env
+.env.*
+!.env.example
+node_modules/
+dist/
+build/
+src/main/backend/data/synthetic/
+src/main/backend/data/evaluation/
+.git/
+.DS_Store
+*.log

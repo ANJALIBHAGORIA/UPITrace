@@ -1,11 +1,22 @@
-"""Real Vertex AI Gemini provider (spec section 8).
+"""Vertex AI Gemini provider — the explicit, selected production provider
+(spec section 8, migration from Google AI Studio).
 
-Requires `google-cloud-aiplatform`, a configured `GOOGLE_CLOUD_PROJECT` /
-`VERTEX_AI_LOCATION`, and valid Application Default Credentials. On this
-development machine none of those are present, so this code path is correct
-but unexercised — confirmed by `test_vertex_provider_unavailable_without_credentials`.
-It must never be used to fabricate a response: any failure to initialize or
-call the model raises `AIProviderUnavailable` instead of returning a guess.
+Uses Google's current `google-genai` SDK in Vertex mode
+(`genai.Client(vertexai=True, ...)`), NOT the deprecated
+`vertexai.generative_models` module. Authenticates via Application Default
+Credentials — never reads GEMINI_API_KEY. If ADC, project config, or the
+model call fail for any reason, this raises AIProviderUnavailable; the
+orchestrator does NOT silently retry against the AI Studio API when that
+happens — it falls through to the deterministic (non-AI) result instead,
+same as any other provider failure.
+
+Model ID is read from VERTEX_AI_GEMINI_MODEL with NO hardcoded default —
+Vertex's supported model IDs are not guaranteed to match Google AI Studio's
+(confirmed during this migration: AI Studio deprecated `gemini-2.0-flash` in
+favor of `gemini-3.8-flash`; Vertex's own supported/GA model list is
+independent and must be verified separately, see
+scripts/check_vertex_status.py). Assuming the AI Studio model ID works here
+would violate that requirement, so an unset model ID fails closed.
 """
 from __future__ import annotations
 
@@ -29,29 +40,28 @@ class VertexGeminiProvider:
     source_mode = "LIVE"
 
     def __init__(self, model_identifier: str | None = None) -> None:
-        self.model_identifier = model_identifier or os.environ.get(
-            "VERTEX_AI_GEMINI_MODEL", ""
-        )
-        self._project = os.environ.get("GOOGLE_CLOUD_PROJECT", "")
+        self.model_identifier = model_identifier or os.environ.get("VERTEX_AI_GEMINI_MODEL", "")
+        self._project = os.environ.get("GOOGLE_CLOUD_PROJECT", "upitrace")
         self._location = os.environ.get("VERTEX_AI_LOCATION", "us-central1")
-        if not self._project:
-            raise AIProviderUnavailable("GOOGLE_CLOUD_PROJECT is not set.")
         if not self.model_identifier:
-            raise AIProviderUnavailable("VERTEX_AI_GEMINI_MODEL is not set.")
+            raise AIProviderUnavailable(
+                "VERTEX_AI_GEMINI_MODEL is not set. Do not assume an AI-Studio model ID is "
+                "valid on Vertex — verify with scripts/check_vertex_status.py first."
+            )
 
         try:
-            import vertexai
-            from vertexai.generative_models import GenerativeModel
+            from google import genai
         except ImportError as exc:
-            raise AIProviderUnavailable(f"google-cloud-aiplatform not installed: {exc}") from exc
+            raise AIProviderUnavailable(f"google-genai not installed: {exc}") from exc
 
         try:
-            vertexai.init(project=self._project, location=self._location)
-            self._model = GenerativeModel(self.model_identifier)
-        except Exception as exc:  # auth failures, bad project, etc. — never fabricate instead
-            raise AIProviderUnavailable(f"Vertex AI initialization failed: {exc}") from exc
+            self._client = genai.Client(vertexai=True, project=self._project, location=self._location)
+        except Exception as exc:  # ADC missing, bad project, etc. — never fabricate instead
+            raise AIProviderUnavailable(f"Vertex AI client initialization failed: {exc}") from exc
 
     def generate_investigation(self, context: InvestigationContext) -> dict[str, Any]:
+        from google.genai import types
+
         prompt = (
             context.to_prompt_text()
             + "\n\nRespond with a single JSON object with exactly these keys: "
@@ -59,7 +69,10 @@ class VertexGeminiProvider:
             + ". citation_ids must only contain IDs listed above as available evidence or runbooks."
         )
         try:
-            response = self._model.generate_content(prompt)
+            response = self._client.models.generate_content(
+                model=self.model_identifier, contents=prompt,
+                config=types.GenerateContentConfig(response_mime_type="application/json"),
+            )
             raw_text = response.text
         except Exception as exc:
             raise AIProviderUnavailable(f"Vertex AI call failed: {exc}") from exc

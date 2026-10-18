@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { useNavigate } from "react-router-dom"
+import { useNavigate, useSearchParams } from "react-router-dom"
 import { Button, Card, ErrorState, SectionTitle } from "../components/ui"
 import { api } from "../lib/api"
 import type { SampleIncidentSummary } from "../lib/types"
@@ -13,10 +13,23 @@ interface FormState {
 }
 
 const EMPTY: FormState = { title: "", complaint: "", transaction_ref: "", amount: "", merchant_id: "" }
+const MERCHANTS = ["IRCTC", "BigBasket", "Zomato", "BookMyShow", "Flipkart"]
 
 export function NewIncident() {
   const navigate = useNavigate()
-  const [form, setForm] = useState<FormState>(EMPTY)
+  const [searchParams] = useSearchParams()
+  const [form, setForm] = useState<FormState>(() => ({
+    ...EMPTY,
+    amount: searchParams.get("amount") ?? "",
+    merchant_id: searchParams.get("merchant_id") ?? "",
+    transaction_ref: searchParams.get("transaction_ref") ?? "",
+    complaint: searchParams.get("transaction_ref")
+      ? "Payment succeeded on my UPI app but the order isn't confirmed on the merchant side."
+      : "",
+    title: searchParams.get("transaction_ref")
+      ? `Payment to ${searchParams.get("merchant_id") ?? "merchant"} not confirmed`
+      : "",
+  }))
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({})
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -79,7 +92,10 @@ export function NewIncident() {
             <input className="input" value={form.amount} onChange={(e) => update("amount", e.target.value)} />
           </Field>
           <Field label="Merchant" error={errors.merchant_id}>
-            <input className="input" value={form.merchant_id} onChange={(e) => update("merchant_id", e.target.value)} />
+            <select className="input" value={form.merchant_id} onChange={(e) => update("merchant_id", e.target.value)}>
+              <option value="">Select merchant…</option>
+              {MERCHANTS.map((m) => <option key={m} value={m}>{m}</option>)}
+            </select>
           </Field>
           {submitError && <ErrorState message={submitError} />}
           <Button type="submit" disabled={submitting}>{submitting ? "Creating…" : "Analyze Incident"}</Button>
@@ -90,12 +106,12 @@ export function NewIncident() {
         <SectionTitle>Or try a sample case</SectionTitle>
         {samples === null && <p className="text-sm text-slate-500">Loading samples…</p>}
         {samples?.length === 0 && <p className="text-sm text-slate-500">No samples available.</p>}
-        <div className="flex flex-wrap gap-2">
+        <div className="grid grid-cols-2 gap-2">
           {samples?.map((s) => (
             <button
               key={s.incident_id}
               onClick={() => navigate(`/incidents/${s.incident_id}`)}
-              className="rounded-lg border border-slate-200 px-3 py-2 text-left text-xs hover:border-indigo-400 hover:bg-indigo-50 dark:border-slate-700 dark:hover:bg-slate-800"
+              className="min-w-0 rounded-lg border border-slate-200 px-3 py-2 text-left text-xs leading-snug hover:border-indigo-400 hover:bg-indigo-50 dark:border-slate-700 dark:hover:bg-slate-800"
               title={s.title}
             >
               {s.scenario_category.replaceAll("_", " ")}

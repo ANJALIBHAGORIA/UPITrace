@@ -9,7 +9,9 @@ export function IncidentList() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    api.listIncidents().then(setIncidents).catch((e) => setError(e.message))
+    api.listIncidents()
+      .then((data) => setIncidents([...data].sort((a, b) => b.created_at.localeCompare(a.created_at))))
+      .catch((e) => setError(e.message))
   }, [])
 
   if (error) return <ErrorState message={error} />
@@ -33,7 +35,7 @@ export function IncidentList() {
             <div>
               <p className="font-medium text-slate-900 dark:text-white">{inc.title}</p>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                {inc.incident_id} · {inc.merchant_id} · ₹{inc.amount}
+                {inc.incident_id} · {inc.merchant_id} · ₹{inc.amount} · {new Date(inc.created_at).toLocaleString()}
               </p>
             </div>
             <div className="flex gap-2">

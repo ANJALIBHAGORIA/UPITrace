@@ -4,17 +4,32 @@ logic lives here.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from itertools import count
+from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 
 from src.main.backend import audit
+from src.main.backend.ai.exceptions import AIProviderUnavailable
 from src.main.backend.investigation.orchestrator import run_investigation
 from src.main.backend.investigation.schemas import InvestigationReport
-from src.main.backend.models import Incident, IncidentStatus
+from src.main.backend.models import (
+    DeliveryStatus,
+    EvidenceRecord,
+    Incident,
+    IncidentStatus,
+    NotificationRecord,
+    PaymentAttempt,
+    ProcessingStatus,
+    SourceEvent,
+    VerificationStatus,
+)
 from src.main.backend.reconciliation import apply_reconciliation
+from src.main.backend.retrieval.vector_index import VectorIndex
 from src.main.backend.store import InMemoryStore, load_default_store
 from src.main.backend.tools import schemas as tool_schemas
 from src.main.backend.tools import service as tools
@@ -25,6 +40,10 @@ app = FastAPI(title="UPITrace API", version="0.1.0-phase3")
 
 store: InMemoryStore = load_default_store()
 _incident_counter = count(len(store.incidents) + 1)
+# None if build_rag_index.py hasn't been run yet (no GEMINI_API_KEY available,
+# or just not built) — every caller of _rag_index checks for None and falls
+# back to lexical search rather than erroring.
+_rag_index: VectorIndex | None = VectorIndex.load()
 # Kept here rather than on InMemoryStore to avoid a store -> investigation ->
 # reconciliation -> store import cycle.
 _investigation_reports: dict[str, InvestigationReport] = {}
@@ -47,13 +66,73 @@ def list_incidents(status: Optional[str] = Query(default=None)) -> list[Incident
 def create_incident(req: api_schemas.CreateIncidentRequest) -> Incident:
     incident_id = f"INC-{next(_incident_counter):04d}"
     now = datetime.now(timezone.utc)
+    txn_ref = req.transaction_ref or f"TXN-{incident_id}"
+    pa_id = f"PA-{incident_id}"
+
     incident = Incident(
         incident_id=incident_id, created_at=now, updated_at=now,
-        title=req.title, complaint=req.complaint, transaction_ref=req.transaction_ref,
+        title=req.title, complaint=req.complaint, transaction_ref=txn_ref,
         amount=req.amount, currency=req.currency, merchant_id=req.merchant_id,
-        payment_attempt_id=req.payment_attempt_id, incident_status=IncidentStatus.OPEN,
+        payment_attempt_id=pa_id, incident_status=IncidentStatus.OPEN,
     )
     store.incidents[incident_id] = incident
+
+    # Incidents created through the UI (New Incident / Live Demo) previously
+    # had no linked events/evidence, so the Timeline and Evidence tabs were
+    # empty — unlike the synthetic dataset. Synthesize the same "paid, but
+    # merchant hasn't confirmed" cross-platform trail the demo narrative
+    # describes, so these tabs are populated like any other incident.
+    store.payment_attempts[pa_id] = PaymentAttempt(
+        payment_attempt_id=pa_id, transaction_ref=txn_ref, amount=req.amount,
+        currency=req.currency, payment_method="UPI", created_at=now,
+        provider_status="SUCCESS", source_system="payment_gateway",
+    )
+    t = lambda m: now + timedelta(seconds=m)  # noqa: E731
+    events = [
+        SourceEvent(event_id=f"EVT-{incident_id}-1", incident_id=incident_id, transaction_ref=txn_ref,
+                    source_system="payer_bank", event_type="DEBIT_CONFIRMED", event_time=t(0),
+                    ingested_at=t(1), source_status="DEBIT_SUCCESS", normalized_status="CONFIRMED",
+                    amount=req.amount, verification_status=VerificationStatus.VERIFIED),
+        SourceEvent(event_id=f"EVT-{incident_id}-2", incident_id=incident_id, transaction_ref=txn_ref,
+                    source_system="npci_upi_gateway", event_type="PAYMENT_REQUEST_RECEIVED", event_time=t(2),
+                    ingested_at=t(2), source_status="PROCESSED", normalized_status="OBSERVED",
+                    amount=req.amount, verification_status=VerificationStatus.VERIFIED),
+        SourceEvent(event_id=f"EVT-{incident_id}-3", incident_id=incident_id, transaction_ref=txn_ref,
+                    source_system="payment_gateway", event_type="GATEWAY_STATUS", event_time=t(5),
+                    ingested_at=t(5), source_status="PENDING", normalized_status="PENDING",
+                    amount=req.amount, verification_status=VerificationStatus.UNVERIFIED),
+        SourceEvent(event_id=f"EVT-{incident_id}-4", incident_id=incident_id, transaction_ref=txn_ref,
+                    source_system=f"{req.merchant_id}_platform", event_type="MERCHANT_CALLBACK",
+                    event_time=t(11), ingested_at=t(11), source_status="NOT_RECEIVED",
+                    normalized_status="MISSING", verification_status=VerificationStatus.UNVERIFIED),
+        SourceEvent(event_id=f"EVT-{incident_id}-5", incident_id=incident_id, transaction_ref=txn_ref,
+                    source_system=req.merchant_id, event_type="ORDER_LOOKUP", event_time=t(11),
+                    ingested_at=t(11), source_status="NOT_FOUND", normalized_status="NOT_FOUND",
+                    verification_status=VerificationStatus.UNVERIFIED),
+    ]
+    for e in events:
+        store.source_events[e.event_id] = e
+
+    evidence = [
+        EvidenceRecord(evidence_id=f"EVD-{incident_id}-1", incident_id=incident_id,
+                        evidence_type="BANK_RECORD", source_system="payer_bank",
+                        title="Bank debit confirmation", content=f"₹{req.amount} debited successfully. UTR {txn_ref}.",
+                        ingested_at=t(1), verification_status=VerificationStatus.VERIFIED),
+        EvidenceRecord(evidence_id=f"EVD-{incident_id}-2", incident_id=incident_id,
+                        evidence_type="PROVIDER_RESPONSE", source_system="payment_gateway",
+                        title="Gateway status", content="Transaction marked pending at the gateway.",
+                        ingested_at=t(5), verification_status=VerificationStatus.UNVERIFIED),
+    ]
+    for ev in evidence:
+        store.evidence_records[ev.evidence_id] = ev
+    incident.evidence_ids = [ev.evidence_id for ev in evidence]
+
+    store.notification_records[f"NOTIF-{incident_id}"] = NotificationRecord(
+        notification_id=f"NOTIF-{incident_id}", payment_attempt_id=pa_id,
+        destination_system=f"{req.merchant_id}_webhook", delivery_status=DeliveryStatus.FAILED,
+        processing_status=ProcessingStatus.NOT_PROCESSED, created_at=t(11),
+    )
+
     audit.record(store, incident_id=incident_id, actor_id="api_client",
                  event_type="INCIDENT_CREATED", result="ok")
     return incident
@@ -110,12 +189,36 @@ def get_investigation(incident_id: str) -> InvestigationReport:
 
 @app.get("/api/v1/incidents/{incident_id}/similar-cases")
 def similar_cases(incident_id: str, limit: int = 3) -> list[api_schemas.SimilarCase]:
-    """Lexical (word-overlap) similarity over title+complaint. Real, computed
-    scores — not placeholders — but not the hybrid lexical+semantic retrieval
-    promised for Phase 3 (no embeddings yet)."""
+    """Semantic (Gemini embeddings + cosine similarity) if a RAG index has
+    been built (python -m src.main.backend.scripts.build_rag_index); falls
+    back to lexical (word-overlap) similarity otherwise. The `method` field
+    on every result says which one actually ran — never silently swapped."""
     target = _require_incident(incident_id)
-    target_terms = _tokenize(target.title + " " + target.complaint)
 
+    if _rag_index is not None:
+        try:
+            from src.main.backend.retrieval.embeddings import GeminiEmbeddingProvider, VertexEmbeddingProvider
+            # Must match whatever provider actually built this index — mixing
+            # Vertex and AI Studio vectors would make cosine similarity meaningless.
+            embed_provider = (
+                GeminiEmbeddingProvider() if _rag_index.provider_type == "ai_studio"
+                else VertexEmbeddingProvider()
+            )
+            query_vec = embed_provider.embed_one(f"{target.title}. {target.complaint}")
+            hits = _rag_index.search(query_vec, top_k=limit + 1, kind="incident")
+            results = [
+                api_schemas.SimilarCase(
+                    incident_id=h["id"],
+                    title=store.incidents[h["id"]].title if h["id"] in store.incidents else h["text"],
+                    similarity_score=round(h["score"], 3), shared_terms=[], method="semantic_rag",
+                )
+                for h in hits if h["id"] != incident_id
+            ]
+            return results[:limit]
+        except AIProviderUnavailable:
+            pass  # fall through to lexical
+
+    target_terms = _tokenize(target.title + " " + target.complaint)
     scored = []
     for other in store.incidents.values():
         if other.incident_id == incident_id:
@@ -127,7 +230,7 @@ def similar_cases(incident_id: str, limit: int = 3) -> list[api_schemas.SimilarC
         if score > 0:
             scored.append(api_schemas.SimilarCase(
                 incident_id=other.incident_id, title=other.title,
-                similarity_score=round(score, 3), shared_terms=sorted(shared),
+                similarity_score=round(score, 3), shared_terms=sorted(shared), method="lexical",
             ))
     scored.sort(key=lambda c: c.similarity_score, reverse=True)
     return scored[:limit]
@@ -224,3 +327,30 @@ def _require_incident(incident_id: str) -> Incident:
 
 def _tokenize(text: str) -> set[str]:
     return {w.strip(".,!?#").lower() for w in text.split() if len(w) > 2}
+
+
+# -- Serve the built frontend from this same process/port under /upitrace,
+# so the demo is a single, named URL instead of separate frontend (Vite) +
+# backend (FastAPI) ports, or an unnamed root path.
+# Must be registered LAST: FastAPI matches routes in registration order, and
+# the catch-all below would otherwise shadow every API route above it.
+_FRONTEND_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+
+if _FRONTEND_DIST.exists():
+    app.mount("/upitrace/assets", StaticFiles(directory=_FRONTEND_DIST / "assets"), name="assets")
+
+    @app.get("/")
+    def redirect_root_to_upitrace():
+        return RedirectResponse(url="/upitrace")
+
+    @app.get("/upitrace")
+    @app.get("/upitrace/{full_path:path}")
+    def serve_frontend(full_path: str = ""):
+        # Let real static files (favicon, icons, etc.) through directly.
+        candidate = _FRONTEND_DIST / full_path
+        if full_path and candidate.is_file():
+            return FileResponse(candidate)
+        # Everything else (including deep client-side routes like
+        # /upitrace/incidents/INC-0001/timeline) falls back to index.html so
+        # React Router can handle it client-side.
+        return FileResponse(_FRONTEND_DIST / "index.html")

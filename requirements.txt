@@ -3,10 +3,11 @@ pydantic>=2.9
 uvicorn[standard]>=0.30
 pytest>=8.0
 httpx>=0.27
+numpy>=1.26
+qdrant-client>=1.11
 
-# Optional: only needed for the real VertexGeminiProvider (Phase 3+ with
-# actual Google Cloud credentials). The app runs fully without it — every
-# code path that would need it fails closed to the deterministic fallback.
-# Install attempt on this dev machine stalled (slow/blocked network in this
-# sandbox); not yet verified to actually install cleanly here.
-# google-cloud-aiplatform>=1.70
+# Vertex AI is the explicit, selected production AI provider (chat +
+# embeddings). google-genai is Google's current recommended SDK, used in
+# Vertex mode (vertexai=True) — not the deprecated vertexai.generative_models
+# module, and not google-cloud-aiplatform.
+google-genai>=0.3

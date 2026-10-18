@@ -1,7 +1,11 @@
 @import "tailwindcss";
 
+/* Force light theme always — never follow OS dark mode. `dark:` utilities
+   now only match an explicit .dark class, which nothing ever applies. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
 }
 
 body {

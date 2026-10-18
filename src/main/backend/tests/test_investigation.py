@@ -94,6 +94,21 @@ def test_orchestrator_falls_back_honestly_when_no_provider_given_and_vertex_unco
     assert report.model_identifier == "none (deterministic fallback)"
 
 
+def test_orchestrator_does_not_silently_use_ai_studio_when_vertex_unconfigured(monkeypatch):
+    """Migration requirement: even if a GEMINI_API_KEY (AI Studio) happens to
+    be present, the orchestrator must NOT silently use it when Vertex AI
+    fails — it should go straight to the deterministic fallback instead."""
+    monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
+    monkeypatch.setenv("GEMINI_API_KEY", "fake-key-should-never-be-used")
+    store = _store()
+    incident_id = next(iter(store.incidents))
+    report = run_investigation(store, incident_id, provider=None)
+    assert report.ai_used is False
+    assert report.source_mode == SourceMode.UNAVAILABLE
+    assert report.model_identifier != "fake-deterministic-v1"
+    assert "ai-studio" not in report.model_identifier.lower() and "gemini-3" not in report.model_identifier.lower()
+
+
 def test_orchestrator_uses_explicit_fake_provider_and_reports_simulated():
     store = _store()
     incident_id = next(iter(store.incidents))
@@ -173,9 +188,12 @@ def test_orchestrator_schema_validation_rejects_incomplete_provider_output():
 
 # -- real Vertex provider: confirm it fails closed, not open --------------------
 
-def test_vertex_provider_unavailable_without_project_configured(monkeypatch):
+def test_vertex_provider_defaults_project_to_upitrace_when_unset(monkeypatch):
+    """Spec requirement: project ID defaults to 'upitrace'. Still fails
+    closed overall because no model is configured in this test env."""
     monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
-    with pytest.raises(AIProviderUnavailable, match="GOOGLE_CLOUD_PROJECT"):
+    monkeypatch.delenv("VERTEX_AI_GEMINI_MODEL", raising=False)
+    with pytest.raises(AIProviderUnavailable, match="VERTEX_AI_GEMINI_MODEL"):
         VertexGeminiProvider()
 
 
@@ -184,3 +202,22 @@ def test_vertex_provider_unavailable_without_model_configured(monkeypatch):
     monkeypatch.delenv("VERTEX_AI_GEMINI_MODEL", raising=False)
     with pytest.raises(AIProviderUnavailable, match="VERTEX_AI_GEMINI_MODEL"):
         VertexGeminiProvider()
+
+
+def test_vertex_provider_does_not_assume_ai_studio_model_id(monkeypatch):
+    """Spec requirement: do not assume the AI Studio model ID is supported
+    on Vertex. Setting only GEMINI_MODEL (AI Studio's var) must not satisfy
+    VertexGeminiProvider's model requirement."""
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "some-project")
+    monkeypatch.setenv("GEMINI_MODEL", "gemini-3.8-flash")
+    monkeypatch.delenv("VERTEX_AI_GEMINI_MODEL", raising=False)
+    with pytest.raises(AIProviderUnavailable, match="VERTEX_AI_GEMINI_MODEL"):
+        VertexGeminiProvider()
+
+
+def test_gemini_free_provider_unavailable_without_api_key(monkeypatch):
+    from src.main.backend.ai.gemini_provider import GeminiFreeProvider
+
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    with pytest.raises(AIProviderUnavailable, match="GEMINI_API_KEY"):
+        GeminiFreeProvider()

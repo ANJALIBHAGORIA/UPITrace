@@ -43,9 +43,12 @@ REQUIRED_OUTPUT_FIELDS = (
 
 
 def _default_provider() -> InvestigationAIProvider:
-    """Tries the real Vertex Gemini provider; falls back to raising
-    AIProviderUnavailable (never to the fake provider silently) so the
-    orchestrator's own fallback path — which sets ai_used=False and logs it —
+    """Vertex AI Gemini is the explicitly selected production provider
+    (migrated off Google AI Studio). If Vertex is unavailable — ADC missing,
+    model not configured, the call itself fails — this raises
+    AIProviderUnavailable directly. It does NOT silently retry against the
+    AI Studio API (GeminiFreeProvider still exists for local dev/testing,
+    but is never auto-selected here). The orchestrator's own fallback path
     is the only place that decides to use the deterministic result instead."""
     from src.main.backend.ai.vertex_provider import VertexGeminiProvider  # lazy: optional dependency
 
