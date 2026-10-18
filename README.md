@@ -69,14 +69,14 @@ flowchart TD
 
 ## Technology Stack
 
-| Layer | Technology |
-|---|---|
-| Frontend | React 19, TypeScript, Vite, Tailwind CSS v4, react-router-dom |
-| Backend | Python 3.11 (3.9 in local dev), FastAPI, Pydantic v2 |
-| AI | **Vertex AI Gemini** (`gemini-3.8-flash`) via `google-genai` SDK, ADC auth |
+| Layer            | Technology                                                                                              |
+| ---------------- | ------------------------------------------------------------------------------------------------------- |
+| Frontend         | React 19, TypeScript, Vite, Tailwind CSS v4, react-router-dom                                           |
+| Backend          | Python 3.11 (3.9 in local dev), FastAPI, Pydantic v2                                                    |
+| AI               | **Vertex AI Gemini** (`gemini-3.8-flash`) via `google-genai` SDK, ADC auth                    |
 | RAG / Embeddings | **Vertex AI embeddings** (`gemini-embedding-001`) + **Qdrant** (embedded/local vector DB) |
-| Testing | Pytest (backend), `tsc` + Vite build (frontend) |
-| Planned (Cloud) | Cloud Run (API + frontend), Firebase Hosting, Firestore |
+| Testing          | Pytest (backend),`tsc` + Vite build (frontend)                                                        |
+| Planned (Cloud)  | Cloud Run (API + frontend), Firebase Hosting, Firestore                                                 |
 
 ## Repository Structure
 
@@ -161,24 +161,24 @@ Auth for Vertex AI is via `gcloud auth application-default login` + `gcloud auth
 
 Base path: `/api/v1`. Full interactive docs at `/docs` (FastAPI auto-generated) when the server is running.
 
-| Method | Path | Purpose |
-|---|---|---|
-| GET | `/health` | Liveness + incident count |
-| GET | `/incidents` | List incidents (`?status=` filter) |
-| POST | `/incidents` | Create an incident (auto-synthesizes a cross-platform event trail) |
-| GET | `/incidents/{id}` | Fetch one incident |
-| GET | `/incidents/{id}/events` | Source events for the timeline |
-| GET | `/incidents/{id}/evidence` | Evidence records |
-| POST | `/incidents/{id}/reconcile` | Run the deterministic reconciliation engine |
-| POST | `/incidents/{id}/investigate` | Run the Gemini investigation (falls back honestly if Vertex AI isn't configured) |
-| GET | `/incidents/{id}/investigation` | Fetch the last investigation result |
-| GET | `/incidents/{id}/similar-cases` | RAG semantic search (or lexical fallback) |
-| GET | `/runbooks` | List runbooks (`?tag=` filter) |
-| GET | `/sample-incidents` | One example per scenario category |
-| POST | `/incidents/{id}/actions/propose` | Propose a policy-checked next action |
-| POST | `/actions/{id}/execute` | Execute an action (SIMULATED only) |
-| POST | `/actions/{id}/verify` | Verify the execution outcome |
-| GET | `/incidents/{id}/audit` | Audit trail for an incident |
+| Method | Path                                | Purpose                                                                          |
+| ------ | ----------------------------------- | -------------------------------------------------------------------------------- |
+| GET    | `/health`                         | Liveness + incident count                                                        |
+| GET    | `/incidents`                      | List incidents (`?status=` filter)                                             |
+| POST   | `/incidents`                      | Create an incident (auto-synthesizes a cross-platform event trail)               |
+| GET    | `/incidents/{id}`                 | Fetch one incident                                                               |
+| GET    | `/incidents/{id}/events`          | Source events for the timeline                                                   |
+| GET    | `/incidents/{id}/evidence`        | Evidence records                                                                 |
+| POST   | `/incidents/{id}/reconcile`       | Run the deterministic reconciliation engine                                      |
+| POST   | `/incidents/{id}/investigate`     | Run the Gemini investigation (falls back honestly if Vertex AI isn't configured) |
+| GET    | `/incidents/{id}/investigation`   | Fetch the last investigation result                                              |
+| GET    | `/incidents/{id}/similar-cases`   | RAG semantic search (or lexical fallback)                                        |
+| GET    | `/runbooks`                       | List runbooks (`?tag=` filter)                                                 |
+| GET    | `/sample-incidents`               | One example per scenario category                                                |
+| POST   | `/incidents/{id}/actions/propose` | Propose a policy-checked next action                                             |
+| POST   | `/actions/{id}/execute`           | Execute an action (SIMULATED only)                                               |
+| POST   | `/actions/{id}/verify`            | Verify the execution outcome                                                     |
+| GET    | `/incidents/{id}/audit`           | Audit trail for an incident                                                      |
 
 **Example** — create an incident with synthetic, non-sensitive data:
 
@@ -197,6 +197,7 @@ curl -X POST http://127.0.0.1:8001/api/v1/incidents \
   "amount": "499"
 }
 ```
+
 *(Response shown is representative, verified against a real local run — exact field set per `models/incident.py`.)*
 
 ## Testing
@@ -218,15 +219,19 @@ This is a **test-suite pass/fail result** (schema validity, reconciliation-rule 
 ## Benchmarking & Evaluation
 
 | Component / Task | Metric | Baseline | UPITrace Result | Dataset / Sample Size | Status / Notes |
-|---|---|---|---|---|---|
-| Backend test suite | Pass/fail | — | **92/92 passing** | 92 unit + integration tests | Verified this session. Tests code correctness, not model quality. |
-| Frontend build/type-check | Pass/fail | — | **0 errors** | — | `tsc -b` + Vite build |
-| Reconciliation rule accuracy | Classification match vs. ground truth | — | **36/36 and 10,008/10,008 match** (full cross-check, deterministic) | All synthetic incidents, 12 scenario categories | This is a **self-consistency check**: ground truth was authored alongside the rules for the same scenarios. It proves the rules implement their own spec correctly — it does **not** establish real-world reconciliation accuracy on unseen/production data. |
-| RAG retrieval relevance | Not measured | — | Not measured | — | Similarity scores (95–97% in demo runs) are cosine-similarity outputs, not a precision/recall evaluation against labeled relevant-document pairs. |
-| AI investigation quality (summary/hypothesis correctness) | Not measured | — | Not measured | — | No human- or model-graded evaluation has been run. |
-| Fraud/risk detection accuracy | Not measured | — | **Not applicable** | — | UPITrace is a reconciliation/investigation tool, not a fraud classifier — no fraud-detection model exists in this codebase. |
-| Vertex AI Gemini call — functional check | Pass/fail | — | **Pass** (real call succeeded) | 1 live call via `check_vertex_status.py` | Confirms the integration works; not a latency/quality benchmark (no multi-run timing was recorded). |
-| API latency | Not measured | — | Not measured | — | No load testing performed. |
+| --- | --- | --- | --- | --- | --- |
+| Backend test suite | Pass/fail | — | **92/92 passing** | 92 unit + integration tests | Previously verified; tests code correctness, not model quality. Re-run before release if code changes. |
+| Frontend build/type-check | Pass/fail | — | **0 errors** | — | `tsc -b` + Vite build; previously verified. |
+| Reconciliation rule consistency | Match against authored ground truth | — | **36/36 and 10,008/10,008 match** | Synthetic incidents; 12 scenario categories | Self-consistency check against ground truth authored alongside the rules. Does not establish real-world accuracy on unseen data. |
+| API: health | Mean / median / p95 latency | — | **1 / 1 / 2 ms** | 10 sequential local requests | Local benchmark only; not cloud latency or load testing. |
+| API: reconciliation | Mean / median / p95 latency | — | **4 / 3 / 9 ms** | 10 sequential local requests | Local benchmark only; not cloud latency or load testing. |
+| API: investigation | Mean / median / p95 latency | — | **120 / 80 / 249 ms** | 10 sequential local requests | Benchmark observed deterministic fallback, not live Vertex AI generation. |
+| API: similar cases | Mean / median / p95 latency | — | **37 / 28 / 69 ms** | 10 sequential local requests | Benchmark observed lexical retrieval only. |
+| Similar-case retrieval | Category match @1 | — | **100% (1.000)** | 120 successful queries; 10 per category | Synthetic labels; lexical method only. Top result matched the query incident's scenario category. This is a topical-relevance proxy, not human relevance grading. |
+| Similar-case retrieval | Category match @5 | — | **100% (1.000)** | 120 successful queries; top 5 results | Synthetic labels; lexical method only. The query category appeared among returned results. Not a precision/recall evaluation over independently labeled relevant documents. |
+| Similar-case retrieval | Methods observed | — | **`lexical` only** | 120 successful queries | The vector index was not active in this benchmark run; these results do not measure semantic/vector retrieval. |
+| AI investigation | Live Vertex AI calls | — | **0/24** | 24 investigations; 2 per category | All observed reports used `none (deterministic fallback)`. Do not interpret these as live Gemini quality or latency results. |
+| Vertex AI provider integration | Functional check | — | **Pass** | 1 successful live call reported by `check_vertex_status.py` separately from this benchmark | Confirms a live provider call succeeded in a separate check; the benchmark itself made zero live Vertex AI calls. Not a multi-run quality or latency benchmark. |
 
 ### Methodology & Limitations
 
@@ -258,10 +263,12 @@ This is a **test-suite pass/fail result** (schema validity, reconciliation-rule 
 **Status: prepared, not yet deployed to a live URL.**
 
 ### What's verified locally
+
 - `Dockerfile` **built and smoke-tested** this session: `docker build` succeeds, the container boots, `/health` and `/upitrace` both return HTTP 200, 10,008 incidents load correctly inside the container.
 - Single-service architecture (FastAPI serves both the API and the built React app from one process/port) — this avoids needing CORS configuration, since everything is same-origin. **No CORS middleware exists or is needed under this architecture.**
 
 ### Cloud Run (backend + frontend, single service)
+
 ```bash
 gcloud run deploy upitrace \
   --source . \
@@ -269,14 +276,17 @@ gcloud run deploy upitrace \
   --allow-unauthenticated \
   --set-env-vars GOOGLE_CLOUD_PROJECT=upitrace,VERTEX_AI_LOCATION=global,VERTEX_AI_GEMINI_MODEL=gemini-3.8-flash,VERTEX_EMBEDDING_MODEL=gemini-embedding-001
 ```
+
 Cloud Run's default service identity needs the **Vertex AI User** IAM role granted on the project for ADC to work server-side — not yet verified against a real Cloud Run service (only verified locally via `gcloud auth application-default login`).
 
 After deploy, build the RAG index once against the live service's environment (it needs real Vertex credentials, which aren't available at Docker build time):
+
 ```bash
 python -m src.main.backend.scripts.build_rag_index
 ```
 
 ### Firebase Hosting / Firestore — not implemented
+
 This repo currently serves the frontend **from the same Cloud Run service**, not from Firebase Hosting. Splitting them would require: (1) a configurable API base URL in the frontend (currently a relative `/api/v1` path, same-origin only), (2) CORS middleware on the backend, (3) a `firebase.json` rewrite config — **none of which exist yet**. Firestore is also not integrated; the backend uses an **in-memory store**, meaning data resets on every restart. Both are planned, not implemented.
 
 ## Troubleshooting & Known Limitations

@@ -36,6 +36,20 @@ def test_verify_and_strip_citations_empty_input():
     assert valid == [] and removed == []
 
 
+def test_verify_and_strip_citations_coerces_object_entries_from_a_loose_provider():
+    """Observed live: Gemini sometimes returns a list of objects (e.g.
+    {"id": "EVD-0001"}) instead of plain ID strings. This must not crash on
+    an unhashable dict, and a real ID nested in a recognized key should still
+    be matched against allowed_ids."""
+    valid, removed = verify_and_strip_citations(
+        [{"id": "EVD-0001"}, {"id": "EVD-9999"}, {"note": "no id key"}],
+        allowed_ids={"EVD-0001", "EVD-0002"},
+    )
+    assert valid == ["EVD-0001"]
+    assert "EVD-9999" in removed
+    assert len(removed) == 2
+
+
 # -- fake provider ------------------------------------------------------------
 
 def test_fake_provider_only_cites_evidence_actually_in_context():
@@ -170,6 +184,32 @@ def test_orchestrator_overrides_an_unsafe_recommended_action():
     assert report.policy_override_applied is True
     assert report.recommended_next_action == "query_reversal_status"
     assert report.recommended_next_action != "tell_customer_refund_is_complete"
+
+
+def test_orchestrator_coerces_string_unresolved_status_from_a_loose_provider():
+    """Observed live: Gemini's JSON mode has no typed schema, just a field-name
+    list, so it sometimes returns unresolved_status as a word ("RESOLVED")
+    instead of a boolean. The orchestrator must coerce this instead of letting
+    the whole investigation 500 on a Pydantic validation error."""
+    class LooseProvider:
+        model_identifier = "loose-v1"
+        source_mode = "SIMULATED"
+
+        def generate_investigation(self, context: InvestigationContext) -> dict[str, Any]:
+            return {
+                "summary": "s", "confirmed_facts": [], "competing_hypotheses": [],
+                "supporting_evidence": [], "contradicting_evidence": [], "missing_evidence": [],
+                "recommended_checks": [],
+                "recommended_next_action": context.reconciliation.permitted_checks[0]
+                if context.reconciliation.permitted_checks else "No action required.",
+                "reasoning": "r", "uncertainty_explanation": "u",
+                "citation_ids": [], "unresolved_status": "RESOLVED",
+            }
+
+    store = _store()
+    incident_id = next(iter(store.incidents))
+    report = run_investigation(store, incident_id, provider=LooseProvider())
+    assert report.unresolved_status is False
 
 
 def test_orchestrator_schema_validation_rejects_incomplete_provider_output():

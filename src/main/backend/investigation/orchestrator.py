@@ -55,6 +55,18 @@ def _default_provider() -> InvestigationAIProvider:
     return VertexGeminiProvider()
 
 
+def _coerce_unresolved_status(value: object) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        token = value.strip().lower()
+        if token in ("true", "unresolved", "yes", "1"):
+            return True
+        if token in ("false", "resolved", "no", "0"):
+            return False
+    raise ValueError(f"AI provider returned unrecognized unresolved_status value: {value!r}")
+
+
 def _apply_policy_check(permitted_checks: list[str], recommended_next_action: str) -> tuple[str, bool]:
     """Step 12. recommended_next_action must be one of the reconciliation
     engine's own permitted_checks whenever that list is non-empty — this is
@@ -149,6 +161,12 @@ def run_investigation(
     missing = [f for f in REQUIRED_OUTPUT_FIELDS if f not in raw]
     if missing:
         raise ValueError(f"AI provider output missing required fields: {missing}")
+
+    # Gemini's JSON mode isn't given a typed schema, just a field-name list, so
+    # it sometimes returns unresolved_status as a word ("RESOLVED") instead of
+    # a boolean (observed live, not hypothetical) — coerce at this AI-output
+    # boundary rather than letting Pydantic reject the whole report.
+    raw["unresolved_status"] = _coerce_unresolved_status(raw["unresolved_status"])
 
     # Step 10 + 11: verify citations; strip and report anything unsupported.
     allowed_ids = context.allowed_citation_ids()

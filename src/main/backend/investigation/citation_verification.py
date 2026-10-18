@@ -9,15 +9,33 @@ are reported back (never silently dropped) so they can be counted as an
 from __future__ import annotations
 
 
+def _coerce_citation_id(entry: object) -> str:
+    """Gemini's JSON mode has no typed schema for these list fields, so an
+    entry is sometimes an object (e.g. {"id": "EVD-001"}) instead of a plain
+    ID string (observed live). Pull out a plausible ID key; anything else
+    falls back to its string form, which won't match allowed_ids and is
+    correctly stripped as unsupported rather than crashing on an unhashable
+    dict."""
+    if isinstance(entry, str):
+        return entry
+    if isinstance(entry, dict):
+        for key in ("id", "citation_id", "evidence_id", "ref_id"):
+            value = entry.get(key)
+            if isinstance(value, str):
+                return value
+    return str(entry)
+
+
 def verify_and_strip_citations(
-    citation_ids: list[str], allowed_ids: set[str]
+    citation_ids: list, allowed_ids: set[str]
 ) -> tuple[list[str], list[str]]:
     """Returns (valid_ids, removed_ids). Order of valid_ids is preserved;
     duplicates are removed."""
     seen: set[str] = set()
     valid: list[str] = []
     removed: list[str] = []
-    for cid in citation_ids:
+    for raw_entry in citation_ids:
+        cid = _coerce_citation_id(raw_entry)
         if cid in seen:
             continue
         seen.add(cid)
